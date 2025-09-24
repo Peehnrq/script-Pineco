@@ -34,64 +34,74 @@ options = Options()
 options.add_argument("--headless")
 options.add_argument("--disable-gpu")
 options.add_argument("--log-level=3")
+options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
 
 navegador = webdriver.Chrome(options=options)
 
-url_categoria = "https://www.shop-pineapple.co/vestuario"
-navegador.get(url_categoria)
+try:
+    url_categoria = "https://www.shop-pineapple.co/buscar?q=Moletom+Essentials+Bulls"
+    navegador.get(url_categoria)
 
-# Scroll para carregar mais produtos
-for _ in range(10):
-    navegador.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-    time.sleep(1)
+    # Scroll para carregar mais produtos
+    for _ in range(10):
+        navegador.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+        time.sleep(2)
 
-soup = BeautifulSoup(navegador.page_source, "html.parser")
+    soup = BeautifulSoup(navegador.page_source, "html.parser")
 
-# Busca a lista de produtos
-ul = soup.select_one("div#listagemProdutos ul[data-produtos-linha]")
-itens = ul.find_all("li", class_="span3") if ul else []
+    # Busca a lista de produtos
+    ul = soup.select_one("div#listagemProdutos ul[data-produtos-linha]")
+    itens = ul.find_all("li", class_="span3") if ul else []
 
-print(f"{len(itens)} produtos encontrados.")
+    print(f"{len(itens)} produtos encontrados.")
 
-produtos = []
-for item in itens:
-    a = item.find("a", href=True, title=True)
-    if a:
-        titulo = limpar_nome(a["title"])
-        link = urljoin(url_categoria, a["href"])
-        produtos.append((titulo, link))
+    produtos = []
+    for item in itens:
+        a = item.find("a", href=True, title=True)
+        if a:
+            titulo = limpar_nome(a["title"])
+            link = urljoin(url_categoria, a["href"])
+            produtos.append((titulo, link))
 
-# Cria a pasta raiz das imagens
-os.makedirs("imagens_pineapple", exist_ok=True)
+    # Cria a pasta raiz das imagens
+    os.makedirs("imagens_pineapple", exist_ok=True)
 
-# Acessa cada produto e baixa as imagens
-for i, (titulo, link_produto) in enumerate(produtos, 1):
-    print(f"\n[{i}/{len(produtos)}] {titulo}")
-    navegador.get(link_produto)
-    time.sleep(1)
+    # Acessa cada produto e baixa as imagens
+    for i, (titulo, link_produto) in enumerate(produtos, 1):
+        titulo_unico = f"{titulo}_{i:03d}"  # Evita duplicidade de pastas
+        print(f"\n[{i}/{len(produtos)}] {titulo_unico}")
+        
+        try:
+            navegador.get(link_produto)
+            time.sleep(2)
+        except Exception as e:
+            print(f"❌ Erro ao acessar página do produto: {e}")
+            continue
 
-    soup_produto = BeautifulSoup(navegador.page_source, "html.parser")
-    pasta_produto = os.path.join("imagens_pineapple", titulo)
-    os.makedirs(pasta_produto, exist_ok=True)
+        soup_produto = BeautifulSoup(navegador.page_source, "html.parser")
+        pasta_produto = os.path.join("imagens_pineapple", titulo_unico)
+        os.makedirs(pasta_produto, exist_ok=True)
 
-    imagens = []
+        imagens = []
 
-    # Imagem principal
-    img_principal = soup_produto.select_one("img#imagemProduto")
-    if img_principal and img_principal.get("src"):
-        imagens.append(img_principal["src"])
+        # Imagem principal
+        img_principal = soup_produto.select_one("img#imagemProduto")
+        if img_principal and img_principal.get("src"):
+            imagens.append(img_principal["src"])
 
-    # Imagens extras das miniaturas
-    miniaturas = soup_produto.select("ul.miniaturas li a[data-imagem-grande]")
-    for a in miniaturas:
-        url_img = a.get("data-imagem-grande")
-        if url_img and url_img not in imagens:
-            imagens.append(url_img)
+        # Imagens extras das miniaturas
+        miniaturas = soup_produto.select("ul.miniaturas li a[data-imagem-grande]")
+        for a in miniaturas:
+            url_img = a.get("data-imagem-grande")
+            if url_img and url_img not in imagens:
+                imagens.append(url_img)
 
-    # Baixa as imagens
-    for idx, url_img in enumerate(imagens, 1):
-        nome_img = f"img_{idx}.jpg"
-        baixar_imagem(url_img, pasta_produto, nome_img)
+        # Baixa as imagens
+        for idx, url_img in enumerate(imagens, 1):
+            nome_img = f"img_{idx}.jpg"
+            baixar_imagem(url_img, pasta_produto, nome_img)
 
-navegador.quit()
-print("\n✅ Todas as imagens foram baixadas com sucesso!")
+    print("\n✅ Todas as imagens foram baixadas com sucesso!")
+
+finally:
+    navegador.quit()
